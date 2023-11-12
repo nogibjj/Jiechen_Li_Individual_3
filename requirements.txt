@@ -1,0 +1,17 @@
+boto3
+#devops
+black
+pylint
+click
+pytest
+pytest-cov
+
+#requests
+#rust based linter
+ruff
+
+#add pandas, matplotlib 
+pandas
+#scikit-learn
+matplotlib
+numpy
