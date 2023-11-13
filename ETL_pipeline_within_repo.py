@@ -3,11 +3,15 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 
+
 # Create Spark session
 spark = SparkSession.builder.appName("School Attendance ETL").getOrCreate()
 
 # Set up the Blob storage account access key
-spark.conf.set("fs.azure.account.key.<individual3>.blob.core.windows.net", "<RvtG/R+z25TAAm6LdgMMfxV9zJT/4A20TYb2O30T+EeliwJFKoONpPZvQt25WHFP9fTVBcbmInd5+AStlw2TzA==>")
+spark.conf.set(
+    "fs.azure.account.key.<individual3>.blob.core.windows.net",
+    "<RvtG/R+z25TAAm6LdgMMfxV9zJT/4A20TYb2O30T+EeliwJFKoONpPZvQt25WHFP9fTVBcbmInd5+AStlw2TzA==>",
+)
 
 
 # COMMAND ----------
@@ -17,8 +21,9 @@ storage_account_name = "individual3"
 storage_account_access_key = "RvtG/R+z25TAAm6LdgMMfxV9zJT/4A20TYb2O30T+EeliwJFKoONpPZvQt25WHFP9fTVBcbmInd5+AStlw2TzA=="
 
 spark.conf.set(
-  f"fs.azure.account.key.{storage_account_name}.blob.core.windows.net",
-  storage_account_access_key)
+    f"fs.azure.account.key.{storage_account_name}.blob.core.windows.net",
+    storage_account_access_key,
+)
 
 csv_file_path = "wasbs://schoolattendance@individual3.blob.core.windows.net/School_Attendance_by_Student_Group_and_District__2021-2022.csv"
 df = spark.read.csv(csv_file_path, header=True, inferSchema=True)
@@ -32,7 +37,8 @@ df.show()
 df.createOrReplaceTempView("School_Attendance_Table")
 
 # Example Transformation: Create new table with specific columns
-transformed_df = spark.sql("""
+transformed_df = spark.sql(
+    """
     SELECT 
         "District code" AS District_code, 
         "District name" AS District_name, 
@@ -41,7 +47,8 @@ transformed_df = spark.sql("""
         "2021-2022_student_count_-_year_to_date" AS Student_count, 
         "2021-2022_attendance_rate_-_year_to_date" AS Attendance_rate 
     FROM School_Attendance_Table
-""")
+"""
+)
 transformed_df.show()
 
 # COMMAND ----------
@@ -78,7 +85,12 @@ spark.sql("SELECT * FROM school_attendance_delta LIMIT 10").show()
 from pyspark.sql.functions import col
 
 # Example validation: Check for null values in key columns
-if delta_df.filter(col("District_code").isNull() | col("Attendance_rate").isNull()).count() > 0:
+if (
+    delta_df.filter(
+        col("District_code").isNull() | col("Attendance_rate").isNull()
+    ).count()
+    > 0
+):
     raise Exception("Data validation failed: Null values found in key columns")
 
 
@@ -86,7 +98,12 @@ if delta_df.filter(col("District_code").isNull() | col("Attendance_rate").isNull
 
 # Data Validation and Quality Checks
 # Check for null values in key columns
-transformed_df.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in transformed_df.columns]).show()
+transformed_df.select(
+    [
+        count(when(isnan(c) | col(c).isNull(), c)).alias(c)
+        for c in transformed_df.columns
+    ]
+).show()
 
 
 # COMMAND ----------
