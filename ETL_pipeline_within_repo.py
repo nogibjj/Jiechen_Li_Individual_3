@@ -51,7 +51,7 @@ transformed_df.show()
 delta_table_path = "/mnt/delta/School_Attendance_Transformed"
 
 # Write the DataFrame as a Delta table
-transformed_df.write.format("delta").save(delta_table_path)
+transformed_df.write.format("delta").mode("overwrite").save(delta_table_path)
 
 # COMMAND ----------
 
