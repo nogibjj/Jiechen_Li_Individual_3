@@ -1,165 +1,115 @@
 [![CI](https://github.com/nogibjj/Jiechen_Li_Mini_6_MySQL/actions/workflows/ci.yml/badge.svg)](https://github.com/nogibjj/Jiechen_Li_Mini_6_MySQL/actions/workflows/ci.yml)
 
-## Jiechen_Li_Mini_6_MySQL
+## Jiechen_Li_Individual_3
 
 ### Purpose
 
-* Design a complex SQL query involving joins, aggregation, and sorting
-* Provide an explanation for what the query is doing and the expected results
+* A well-documented Databricks notebook that performs ETL (Extract, Transform, Load) operations, checked into the repository.
+* Usage of Delta Lake for data storage.
+* Usage of Spark SQL for data transformations.
+* Proper error handling and data validation.
+* Visualization of the transformed data.
+* An automated trigger to initiate the pipeline.
 
 ### Dataset
 
 The dataset is sellcted from [DATA.GOV](https://catalog.data.gov/dataset/school-attendance-by-student-group-and-district-2021-2022/resource/d923f39c-c84c-4fa9-a252-c1f6b465bd55) in the United States.
 The dataset appears to represent attendance data for various student groups across different districts in Connecticut for the academic years 2021-2022, 2020-2021, and 2019-2020.
 
-### SQL Query
+### Databricks Notebook Performs ETL
 
-The goal is to compare the attendance rates of the "All Students" group in the 2021-2022 academic year against the rates in the 2020-2021 academic year for each district. We want to find districts where the attendance rate increased, remained stable (with a variation of less than 1%), or decreased.
+1. **Extract: Read the CSV file from Azure Blob storage.**
 
-1. **Create Tables**
+```python
+# Import necessary libraries
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
 
-```sql
-CREATE DATABASE School_Attendance;
-DEFAULT CHARACTER SET = 'utf8mb4';
-USE School_Attendance;
+# Create Spark session
+spark = SparkSession.builder.appName("School Attendance ETL").getOrCreate()
 
-CREATE TABLE
-    School_Attendance_Table (
-        District_code VARCHAR(255),
-        District_name VARCHAR(255),
-        Category VARCHAR(255),
-        Student_group VARCHAR(255),
-        `2021-2022_student_count_-_year_to_date` INT,
-        `2021-2022_attendance_rate_-_year_to_date` FLOAT,
-        `2020-2021_student_count` INT,
-        `2020-2021_attendance_rate` FLOAT,
-        `2019-2020_student_count` INT,
-        `2019-2020_attendance_rate` FLOAT,
-        Reporting_period DATE,
-        Date_update DATE
-    );
+# Set up the Blob storage account access key
+spark.conf.set("fs.azure.account.key.<individual3>.blob.core.windows.net", "<RvtG/R+z25TAAm6LdgMMfxV9zJT/4A20TYb2O30T+EeliwJFKoONpPZvQt25WHFP9fTVBcbmInd5+AStlw2TzA==>")
 
-SET GLOBAL local_infile=1;
-show tables;
+# Read the CSV file from Blob storage
+storage_account_name = "individual3"
+storage_account_access_key = "RvtG/R+z25TAAm6LdgMMfxV9zJT/4A20TYb2O30T+EeliwJFKoONpPZvQt25WHFP9fTVBcbmInd5+AStlw2TzA=="
 
-LOAD DATA
-    LOCAL INFILE '/Users/castnut/Desktop/706_Data_Engineering/mini_6/Jiechen_Li_Mini_6_External_Database/School_Attendance_by_Student_Group_and_District__2021-2022.csv' INTO
-TABLE
-    School_Attendance_Table FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n' IGNORE 1 ROWS;
+spark.conf.set(
+  f"fs.azure.account.key.{storage_account_name}.blob.core.windows.net",
+  storage_account_access_key)
 
--- Creating the attendance_2021_2022 table
-CREATE TABLE
-    attendance_2021_2022 (
-        District_code VARCHAR(255),
-        District_name VARCHAR(255),
-        Category VARCHAR(255),
-        Student_group VARCHAR(255),
-        Student_count INT,
-        Attendance_rate FLOAT
-    );
-
--- Inserting data into the attendance_2021_2022 table
-
-INSERT INTO
-    attendance_2021_2022 (
-        District_code,
-        District_name,
-        Category,
-        Student_group,
-        Student_count,
-        Attendance_rate
-    )
-SELECT
-    District_code,
-    District_name,
-    Category,
-    student_group,
-    `2021-2022_student_count_-_year_to_date`,
-    `2021-2022_attendance_rate_-_year_to_date`
-FROM
-    `School_Attendance_Table`;
-
--- Creating the attendance_2020_2021 table
-CREATE TABLE
-    attendance_2020_2021 (
-        District_code VARCHAR(255),
-        District_name VARCHAR(255),
-        Category VARCHAR(255),
-        Student_group VARCHAR(255),
-        Student_count INT,
-        Attendance_rate FLOAT
-    );
-
--- Inserting data into the attendance_2020_2021 table
-INSERT INTO
-    attendance_2020_2021 (
-        District_code,
-        District_name,
-        Category,
-        Student_group,
-        Student_count,
-        Attendance_rate
-    )
-SELECT
-    District_code,
-    District_name,
-    Category,
-    student_group,
-    `2020-2021_student_count`,
-    `2020-2021_attendance_rate`
-FROM
-    `School_Attendance_Table`;
+csv_file_path = "wasbs://schoolattendance@individual3.blob.core.windows.net/School_Attendance_by_Student_Group_and_District__2021-2022.csv"
+df = spark.read.csv(csv_file_path, header=True, inferSchema=True)
+df.show()
 
 ```
 
-2. **School Attendance Rate Difference**
+2. **Transform: Perform the necessary transformations on the data.**
 
-```sql
-WITH Comparison AS (
-        SELECT
-            a21.District_code,
-            a21.District_name,
-            a21.Attendance_rate AS rate_2021_2022,
-            a20.Attendance_rate AS rate_2020_2021, (
-                a21.Attendance_rate - a20.Attendance_rate
-            ) AS rate_difference
-        FROM
-            attendance_2021_2022 AS a21
-            JOIN attendance_2020_2021 AS a20 ON a21.District_code = a20.District_code
-        WHERE
-            a21.Student_group = 'All Students'
-            AND a20.Student_group = 'All Students'
-    )
-SELECT
-    District_code,
-    District_name,
-    CASE
-        WHEN rate_difference > 0.01 THEN 'Increased'
-        WHEN rate_difference BETWEEN -0.01 AND 0.01 THEN 'Stable'
-        ELSE 'Decreased'
-    END AS Attendance_trend,
-    rate_2021_2022,
-    rate_2020_2021
-FROM Comparison
-ORDER BY rate_difference DESC;
+```python
+# Transform Data Using SQL
+# Register the DataFrame as a temp view
+df.createOrReplaceTempView("School_Attendance_Table")
+
+# Example Transformation: Create new table with specific columns
+transformed_df = spark.sql("""
+    SELECT 
+        "District code" AS District_code, 
+        "District name" AS District_name, 
+        Category, 
+        "Student group" AS Student_group, 
+        "2021-2022_student_count_-_year_to_date" AS Student_count, 
+        "2021-2022_attendance_rate_-_year_to_date" AS Attendance_rate 
+    FROM School_Attendance_Table
+""")
+transformed_df.show()
+
 ```
 
-### Explanation
+3. **Load: Save the transformed data back to Azure Blob storage, potentially as a Delta Lake table for efficient querying and storage.**
 
-In the WITH clause, I define a Common Table Expression (CTE) called Comparison to join the two tables (attendance_2021_2022 and attendance_2020_2021) based on the District code. This CTE filters the records for the "All Students" group and computes the difference in attendance rates between the two academic years.
+```python
+# Load Transformed Data into Delta Lake
+# Define the path to store the Delta table
+delta_table_path = "/mnt/delta/School_Attendance_Transformed"
 
-In the main query, I use a CASE statement to categorize the attendance trend as 'Increased', 'Stable', or 'Decreased' based on the rate difference.
+# Write the DataFrame as a Delta table
+transformed_df.write.format("delta").mode("overwrite").save(delta_table_path)
 
-The final results are ordered by "rate_difference" in descending order, meaning districts with the most significant increase in attendance rate will be shown first.
+# Read from Delta Lake
+delta_df = spark.read.format("delta").load(delta_table_path)
+delta_df.show()
+```
+
+Please check ``ETL_pipeline_within_repo.py`` for detailed output.
 
 ### Results
 
-The result will be a list of districts, their attendance rates for the "All Students" group in the 2021-2022 and 2020-2021 academic years. The visualization of top 15 districts based on rate difference in attendance is as following:
+1. **Connect GitHub Repo with Databricks Repo**
+<img decoding="async" src="connect_github_databricks_repo.png" width="85%"><br>  
 
-<img decoding="async" src="comparison_rates.png" width="85%">  
+2. **Transformed data in Delta Lake to Interact with Spark SQL**
+<img decoding="async" src="delta_lake_with_Spark.png" width="85%"><br/>
 
-Please check ``sql_results_plot.py`` for details.
+3. **Data Visualization**
+<img decoding="async" src="comparison_rates.png" width="85%"><br/>
+
+4. **Commit from Databricks to GitHub Repo**
+<img decoding="async" src="commit_from_Azure_to_GitHub.png" width="85%"><br/>
+
+5. **Automated Trigger**
+<img decoding="async" src="automated_trigger.png" width="85%"><br/>
+
+### Recommendation for Management Team
+
+The goal of this analysis is to compare the attendance rates of the "All Students" group in the 2021-2022 academic year against the rates in the 2020-2021 academic year for each district. We want to find districts where the attendance rate increased, remained stable (with a variation of less than 1%), or decreased. The results show that the attendance rate in 2020-2021 is better than 2021-2022 in general. We may consider the Covid in 2021-2022 into consideration when analyze this result.
+
+### Demo Video
+
+1. [Automated Trigger Walkthrough Video](https://youtu.be/NVmPZFgrJ2Q)
+2. Please click <a href="https://youtu.be/cYU2Ll8q330" target="_blank">here</a> to watch the explanatory Demo Video of this repo.
 
 ### Reference
 
-Please click <a href="https://github.com/nogibjj/Jiechen_Li_Mini_2_Pandas.git" target="_blank">here</a> to see the template of this repo.
+Please click <a href="https://github.com/nogibjj/Jiechen_Li_Mini_10_PySpark.git" target="_blank">here</a> to see the template of this repo.
